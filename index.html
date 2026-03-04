@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>語音股市通</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 增加按鈕點擊感與對比度 */
+        .stock-card:focus { outline: 4px solid #3b82f6; }
+        button:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="bg-gray-900 text-white p-4 font-sans">
+
+    <header class="mb-6">
+        <h1 class="text-3xl font-bold mb-2">語音股市通</h1>
+        <p class="text-gray-400">點擊股票卡片即可聽取即時報價</p>
+    </header>
+
+    <section class="mb-8 bg-gray-800 p-4 rounded-lg">
+        <label for="stockInput" class="block mb-2">新增美股代號 (如: AAPL, TSLA):</label>
+        <div class="flex gap-2">
+            <input type="text" id="stockInput" class="flex-1 p-4 rounded bg-gray-700 text-xl uppercase" placeholder="輸入代號">
+            <button onclick="addStock()" class="bg-blue-600 px-6 py-4 rounded-lg font-bold text-xl" aria-label="新增股票">新增</button>
+        </div>
+    </section>
+
+    <main id="stockList" class="grid gap-4">
+        </main>
+
+    <script>
+        let myStocks = JSON.parse(localStorage.getItem('myStocks')) || ['AAPL', 'GOOGL', '700.HK'];
+
+        // 模擬獲取股價 (實際應用可對接 Finnhub API)
+        async function fetchPrice(symbol) {
+            // 這裡示範隨機數據，實際需更換為 fetch(API_URL)
+            return {
+                price: (Math.random() * 200 + 100).toFixed(2),
+                change: (Math.random() * 10 - 5).toFixed(2),
+                high: "210.50",
+                low: "195.20",
+                percent: (Math.random() * 2).toFixed(2)
+            };
+        }
+
+        async function renderList() {
+            const list = document.getElementById('stockList');
+            list.innerHTML = '';
+
+            for (let symbol of myStocks) {
+                const data = await fetchPrice(symbol);
+                const isUp = data.change >= 0;
+                
+                const card = document.createElement('div');
+                card.className = `stock-card p-6 rounded-xl border-2 ${isUp ? 'border-green-500' : 'border-red-500'} bg-gray-800`;
+                card.tabIndex = 0; // 讓旁白可以選中
+                card.setAttribute('role', 'button');
+                card.setAttribute('aria-label', `${symbol} 股價 ${data.price} 港元`);
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-2xl font-black">${symbol}</span>
+                        <button onclick="removeStock('${symbol}')" class="text-sm bg-gray-600 p-2 rounded" aria-label="刪除 ${symbol}">刪除</button>
+                    </div>
+                    <div class="text-4xl font-bold ${isUp ? 'text-green-400' : 'text-red-400'}">$${data.price}</div>
+                    <div class="flex justify-between mt-4 text-gray-300">
+                        <span>高: ${data.high}</span>
+                        <span>低: ${data.low}</span>
+                    </div>
+                `;
+
+                // 點擊朗讀功能
+                card.onclick = () => speakStock(symbol, data);
+                list.appendChild(card);
+            }
+            localStorage.setItem('myStocks', JSON.stringify(myStocks));
+        }
+
+        function speakStock(symbol, data) {
+            const status = data.change >= 0 ? "上升" : "下跌";
+            const text = `${symbol}，現價 ${data.price} 元。
+                          今日${status} ${Math.abs(data.change)} 元，
+                          升跌率百分之 ${data.percent}。
+                          今日最高 ${data.high} 元，最低 ${data.low} 元。`;
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-HK'; // 設定為廣東話
+            utterance.rate = 0.9;     // 稍微放慢語速
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function addStock() {
+            const input = document.getElementById('stockInput');
+            const val = input.value.toUpperCase().trim();
+            if (val && !myStocks.includes(val)) {
+                myStocks.push(val);
+                renderList();
+                input.value = '';
+            }
+        }
+
+        function removeStock(symbol) {
+            myStocks = myStocks.filter(s => s !== symbol);
+            renderList();
+        }
+
+        renderList();
+    </script>
+</body>
+</html>
