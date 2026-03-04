@@ -3,90 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>語音股市通</title>
+    <title>語音股市通 - Finnhub 版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 增加按鈕點擊感與對比度 */
-        .stock-card:focus { outline: 4px solid #3b82f6; }
-        button:active { transform: scale(0.95); }
+        /* 針對視障人士的高對比度與焦點樣式 */
+        .stock-card:focus { outline: 6px solid #fbbf24; background-color: #1e293b; }
+        .btn-large { min-height: 60px; min-width: 60px; }
     </style>
 </head>
-<body class="bg-gray-900 text-white p-4 font-sans">
+<body class="bg-black text-white p-4 font-sans">
 
-    <header class="mb-6">
-        <h1 class="text-3xl font-bold mb-2">語音股市通</h1>
-        <p class="text-gray-400">點擊股票卡片即可聽取即時報價</p>
+    <header class="mb-6 border-b border-gray-700 pb-4">
+        <h1 class="text-3xl font-black text-yellow-500">語音股市通</h1>
+        <p class="text-lg text-gray-300">點擊下方卡片，旁白會讀出即時美股報價</p>
     </header>
 
-    <section class="mb-8 bg-gray-800 p-4 rounded-lg">
-        <label for="stockInput" class="block mb-2">新增美股代號 (如: AAPL, TSLA):</label>
-        <div class="flex gap-2">
-            <input type="text" id="stockInput" class="flex-1 p-4 rounded bg-gray-700 text-xl uppercase" placeholder="輸入代號">
-            <button onclick="addStock()" class="bg-blue-600 px-6 py-4 rounded-lg font-bold text-xl" aria-label="新增股票">新增</button>
+    <section class="mb-8">
+        <label for="stockInput" class="block text-xl mb-2">新增美股代號 (大寫):</label>
+        <div class="flex gap-3">
+            <input type="text" id="stockInput" 
+                   class="flex-1 p-5 rounded-lg bg-gray-800 text-2xl border-2 border-gray-600 focus:border-yellow-500 uppercase" 
+                   placeholder="例如: AAPL">
+            <button onclick="addStock()" 
+                    class="bg-yellow-500 text-black px-8 py-4 rounded-lg font-bold text-2xl btn-large"
+                    aria-label="新增股票代號">新增</button>
         </div>
     </section>
 
-    <main id="stockList" class="grid gap-4">
+    <div id="loading" class="hidden text-xl text-yellow-500 mb-4">更新中...</div>
+    <main id="stockList" class="grid gap-6">
         </main>
 
     <script>
-        let myStocks = JSON.parse(localStorage.getItem('myStocks')) || ['AAPL', 'GOOGL', '700.HK'];
+        // --- 設定區 ---
+        const API_KEY = 'd6jc3f9r01ql467j5uigd6jc3f9r01ql467j5uj0'; // <--- 喺呢度貼上你嘅 Finnhub API Key
+        let myStocks = JSON.parse(localStorage.getItem('myStocks')) || ['AAPL', 'TSLA', 'NVDA', 'MSFT'];
 
-        // 模擬獲取股價 (實際應用可對接 Finnhub API)
-        async function fetchPrice(symbol) {
-            // 這裡示範隨機數據，實際需更換為 fetch(API_URL)
-            return {
-                price: (Math.random() * 200 + 100).toFixed(2),
-                change: (Math.random() * 10 - 5).toFixed(2),
-                high: "210.50",
-                low: "195.20",
-                percent: (Math.random() * 2).toFixed(2)
-            };
+        // --- 核心功能 ---
+
+        // 獲取 Finnhub 數據
+        async function getFinnhubData(symbol) {
+            try {
+                const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${API_KEY}`);
+                const data = await response.json();
+                // Finnhub 回傳欄位: c=現價, d=跌實金額, dp=百分比, h=高, l=低, pc=昨收
+                return {
+                    price: data.c,
+                    change: data.d,
+                    percent: data.dp,
+                    high: data.h,
+                    low: data.l,
+                    prevClose: data.pc
+                };
+            } catch (error) {
+                console.error("API Error:", error);
+                return null;
+            }
         }
 
         async function renderList() {
             const list = document.getElementById('stockList');
+            const loader = document.getElementById('loading');
+            loader.classList.remove('hidden');
+            
             list.innerHTML = '';
 
             for (let symbol of myStocks) {
-                const data = await fetchPrice(symbol);
+                const data = await getFinnhubData(symbol);
+                if (!data || data.price === 0) continue; // 過濾無效代號
+
                 const isUp = data.change >= 0;
-                
+                const colorClass = isUp ? 'text-green-400' : 'text-red-400';
+                const borderColor = isUp ? 'border-green-600' : 'border-red-600';
+
                 const card = document.createElement('div');
-                card.className = `stock-card p-6 rounded-xl border-2 ${isUp ? 'border-green-500' : 'border-red-500'} bg-gray-800`;
-                card.tabIndex = 0; // 讓旁白可以選中
+                card.className = `stock-card p-6 rounded-2xl border-4 ${borderColor} bg-gray-900 shadow-lg transition-all`;
+                card.tabIndex = 0;
                 card.setAttribute('role', 'button');
-                card.setAttribute('aria-label', `${symbol} 股價 ${data.price} 港元`);
+                // 讓手機旁白一掃到就讀出基本資訊
+                card.setAttribute('aria-label', `${symbol}，現價 ${data.price} 美元`);
 
                 card.innerHTML = `
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="text-2xl font-black">${symbol}</span>
-                        <button onclick="removeStock('${symbol}')" class="text-sm bg-gray-600 p-2 rounded" aria-label="刪除 ${symbol}">刪除</button>
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h2 class="text-3xl font-bold">${symbol}</h2>
+                            <p class="${colorClass} text-2xl font-mono">
+                                ${isUp ? '▲' : '▼'} ${data.price} 
+                                <span class="text-lg ml-2">(${data.percent}%)</span>
+                            </p>
+                        </div>
+                        <button onclick="event.stopPropagation(); removeStock('${symbol}')" 
+                                class="bg-gray-700 p-3 rounded-lg text-sm border border-gray-500 btn-large"
+                                aria-label="刪除 ${symbol}">
+                            刪除
+                        </button>
                     </div>
-                    <div class="text-4xl font-bold ${isUp ? 'text-green-400' : 'text-red-400'}">$${data.price}</div>
-                    <div class="flex justify-between mt-4 text-gray-300">
-                        <span>高: ${data.high}</span>
-                        <span>低: ${data.low}</span>
+                    <div class="grid grid-cols-2 gap-2 text-gray-400 text-lg border-t border-gray-800 pt-4">
+                        <span>最高: ${data.high}</span>
+                        <span>最低: ${data.low}</span>
                     </div>
                 `;
 
-                // 點擊朗讀功能
+                // 點擊觸發語音朗讀
                 card.onclick = () => speakStock(symbol, data);
                 list.appendChild(card);
             }
+            
+            loader.classList.add('hidden');
             localStorage.setItem('myStocks', JSON.stringify(myStocks));
         }
 
         function speakStock(symbol, data) {
             const status = data.change >= 0 ? "上升" : "下跌";
-            const text = `${symbol}，現價 ${data.price} 元。
-                          今日${status} ${Math.abs(data.change)} 元，
-                          升跌率百分之 ${data.percent}。
+            const absChange = Math.abs(data.change).toFixed(2);
+            const absPercent = Math.abs(data.percent).toFixed(2);
+            
+            // 專為廣東話設計的稿本
+            const text = `${symbol}，現價 ${data.price} 美元。
+                          今日${status} ${absChange} 元，
+                          幅度百分之 ${absPercent}。
                           今日最高 ${data.high} 元，最低 ${data.low} 元。`;
             
+            // 取消所有排隊中的語音，立即播放最新點擊的
+            window.speechSynthesis.cancel();
+            
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'zh-HK'; // 設定為廣東話
-            utterance.rate = 0.9;     // 稍微放慢語速
+            utterance.lang = 'zh-HK'; 
+            utterance.rate = 0.85; // 稍慢一點，聽得清楚啲
+            utterance.pitch = 1.0;
             window.speechSynthesis.speak(utterance);
         }
 
@@ -101,11 +145,16 @@
         }
 
         function removeStock(symbol) {
-            myStocks = myStocks.filter(s => s !== symbol);
-            renderList();
+            if(confirm(`確定要刪除 ${symbol} 嗎？`)) {
+                myStocks = myStocks.filter(s => s !== symbol);
+                renderList();
+            }
         }
 
+        // 初始化
         renderList();
+        // 每 60 秒自動刷新一次
+        setInterval(renderList, 60000);
     </script>
 </body>
 </html>
